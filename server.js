@@ -18,47 +18,46 @@ app.post("/api/chat", async (req, res) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-  model: "openchat/openchat-3.5-1210",
-  messages: [
-    {
-      role: "system",
-      content:
-        "You are a helpful assistant. Format your responses with proper punctuation, spacing between words, and line breaks (\\n) where needed."
-    },
-    { role: "user", content: prompt }
-  ]
-})
-
+        model: "openchat/openchat-3.5-1210",
+        stream: true, // ✅ Critical for SSE to work
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a helpful assistant. Format your responses with proper punctuation, spacing between words, and line breaks (\\n) where needed."
+          },
+          { role: "user", content: prompt }
+        ]
+      })
     });
 
-    // Set headers to stream
+    // Set headers for SSE
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
 
     response.body.on("data", (chunk) => {
-  const lines = chunk.toString().split("\n").filter(line => line.trim());
-  for (const line of lines) {
-    if (line === "[DONE]") {
-      res.write("data: [DONE]\n\n");
-      res.end();
-      return;
-    }
+      const lines = chunk.toString().split("\n").filter(line => line.trim());
+      for (const line of lines) {
+        if (line === "[DONE]") {
+          res.write("data: [DONE]\n\n");
+          res.end();
+          return;
+        }
 
-    try {
-      const json = JSON.parse(line.replace(/^data: /, ""));
-      const token = json.choices?.[0]?.delta?.content;
-      if (token) {
-        // Add spacing between joined words like "Hello!I'm" → "Hello! I'm"
-        const cleanedToken = token.replace(/([a-z])([A-Z])/g, "$1 $2");
-        res.write(`data: ${cleanedToken}\n\n`);
+        try {
+          const json = JSON.parse(line.replace(/^data: /, ""));
+          const token = json.choices?.[0]?.delta?.content;
+          if (token) {
+            // Optional: Fix word-joining issues like "Hi!I'm" → "Hi! I'm"
+            const cleanedToken = token.replace(/([a-z])([A-Z])/g, "$1 $2");
+            res.write(`data: ${cleanedToken}\n\n`);
+          }
+        } catch (err) {
+          console.error("Stream parse error:", err);
+        }
       }
-    } catch (err) {
-      console.error("Stream parse error:", err);
-    }
-  }
-});
-
+    });
 
     response.body.on("end", () => {
       res.write("data: [DONE]\n\n");
@@ -71,7 +70,7 @@ app.post("/api/chat", async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("Fetch error:", err);
     res.status(500).json({ error: "Something went wrong." });
   }
 });
