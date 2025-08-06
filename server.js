@@ -21,7 +21,11 @@ app.post("/api/chat", async (req, res) => {
         model: "mistralai/mistral-7b-instruct",
         stream: true, // 👈 enable streaming
         messages: [
-          { role: "system", content: "You are a helpful assistant." },
+          {
+          role: "system",
+          content:
+            "You are a helpful assistant. Please format your replies with correct spacing, punctuation, and line breaks so they are easy to read."
+        },
           { role: "user", content: prompt }
         ]
       })
