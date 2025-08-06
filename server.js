@@ -18,17 +18,17 @@ app.post("/api/chat", async (req, res) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "mistralai/mistral-7b-instruct",
-        stream: true, // 👈 enable streaming
-        messages: [
-          {
-          role: "system",
-          content:
-            "You are a helpful assistant. Please format your replies with correct spacing, punctuation, and line breaks so they are easy to read."
-        },
-          { role: "user", content: prompt }
-        ]
-      })
+  model: "openchat/openchat-3.5-1210",
+  messages: [
+    {
+      role: "system",
+      content:
+        "You are a helpful assistant. Format your responses with proper punctuation, spacing between words, and line breaks (\\n) where needed."
+    },
+    { role: "user", content: prompt }
+  ]
+})
+
     });
 
     // Set headers to stream
@@ -37,25 +37,28 @@ app.post("/api/chat", async (req, res) => {
     res.setHeader("Connection", "keep-alive");
 
     response.body.on("data", (chunk) => {
-      const lines = chunk.toString().split("\n").filter(line => line.trim());
-      for (const line of lines) {
-        if (line === "[DONE]") {
-          res.write("data: [DONE]\n\n");
-          res.end();
-          return;
-        }
+  const lines = chunk.toString().split("\n").filter(line => line.trim());
+  for (const line of lines) {
+    if (line === "[DONE]") {
+      res.write("data: [DONE]\n\n");
+      res.end();
+      return;
+    }
 
-        try {
-          const json = JSON.parse(line.replace(/^data: /, ""));
-          const token = json.choices?.[0]?.delta?.content;
-          if (token) {
-            res.write(`data: ${token}\n\n`);
-          }
-        } catch (err) {
-          console.error("Stream parse error:", err);
-        }
+    try {
+      const json = JSON.parse(line.replace(/^data: /, ""));
+      const token = json.choices?.[0]?.delta?.content;
+      if (token) {
+        // Add spacing between joined words like "Hello!I'm" → "Hello! I'm"
+        const cleanedToken = token.replace(/([a-z])([A-Z])/g, "$1 $2");
+        res.write(`data: ${cleanedToken}\n\n`);
       }
-    });
+    } catch (err) {
+      console.error("Stream parse error:", err);
+    }
+  }
+});
+
 
     response.body.on("end", () => {
       res.write("data: [DONE]\n\n");
