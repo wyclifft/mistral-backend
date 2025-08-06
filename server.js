@@ -19,6 +19,7 @@ app.post("/api/chat", async (req, res) => {
       },
       body: JSON.stringify({
         model: "mistralai/mistral-7b-instruct",
+        stream: true, // 👈 enable streaming
         messages: [
           { role: "system", content: "You are a helpful assistant." },
           { role: "user", content: prompt }
@@ -26,13 +27,46 @@ app.post("/api/chat", async (req, res) => {
       })
     });
 
-    const data = await response.json();
-    const reply = data.choices[0]?.message?.content;
-    res.json({ response: reply });
+    // Set headers to stream
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    response.body.on("data", (chunk) => {
+      const lines = chunk.toString().split("\n").filter(line => line.trim());
+      for (const line of lines) {
+        if (line === "[DONE]") {
+          res.write("data: [DONE]\n\n");
+          res.end();
+          return;
+        }
+
+        try {
+          const json = JSON.parse(line.replace(/^data: /, ""));
+          const token = json.choices?.[0]?.delta?.content;
+          if (token) {
+            res.write(`data: ${token}\n\n`);
+          }
+        } catch (err) {
+          console.error("Stream parse error:", err);
+        }
+      }
+    });
+
+    response.body.on("end", () => {
+      res.write("data: [DONE]\n\n");
+      res.end();
+    });
+
+    response.body.on("error", (err) => {
+      console.error("Streaming error:", err);
+      res.status(500).end();
+    });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Something went wrong." });
   }
 });
 
-app.listen(3000, () => console.log("Server is running on port 3000"));
+app.listen(3000, () => console.log("✅ Server is running on port 3000"));
