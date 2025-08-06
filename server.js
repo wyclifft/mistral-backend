@@ -14,65 +14,29 @@ app.post("/api/chat", async (req, res) => {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
+        Authorization: `Bearer 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`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openchat/openchat-3.5-1210",
-        stream: true, // ✅ Critical for SSE to work
+        model: "mistralai/mistral-7b-instruct",
         messages: [
           {
             role: "system",
             content:
-              "You are a helpful assistant. Format your responses with proper punctuation, spacing between words, and line breaks (\\n) where needed."
+              "You are a helpful assistant. Format your replies using proper spacing and punctuation. Separate paragraphs with newlines (\\n) so the user can easily read your message.",
           },
-          { role: "user", content: prompt }
-        ]
-      })
+          { role: "user", content: prompt },
+        ],
+      }),
     });
 
-    // Set headers for SSE
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
-    response.body.on("data", (chunk) => {
-      const lines = chunk.toString().split("\n").filter(line => line.trim());
-      for (const line of lines) {
-        if (line === "[DONE]") {
-          res.write("data: [DONE]\n\n");
-          res.end();
-          return;
-        }
-
-        try {
-          const json = JSON.parse(line.replace(/^data: /, ""));
-          const token = json.choices?.[0]?.delta?.content;
-          if (token) {
-            // Optional: Fix word-joining issues like "Hi!I'm" → "Hi! I'm"
-            const cleanedToken = token.replace(/([a-z])([A-Z])/g, "$1 $2");
-            res.write(`data: ${cleanedToken}\n\n`);
-          }
-        } catch (err) {
-          console.error("Stream parse error:", err);
-        }
-      }
-    });
-
-    response.body.on("end", () => {
-      res.write("data: [DONE]\n\n");
-      res.end();
-    });
-
-    response.body.on("error", (err) => {
-      console.error("Streaming error:", err);
-      res.status(500).end();
-    });
-
+    const data = await response.json();
+    const reply = data.choices?.[0]?.message?.content;
+    res.json({ response: reply });
   } catch (err) {
-    console.error("Fetch error:", err);
+    console.error(err);
     res.status(500).json({ error: "Something went wrong." });
   }
 });
 
-app.listen(3000, () => console.log("✅ Server is running on port 3000"));
+app.listen(3000, () => console.log("✅ Server running on port 3000"));
